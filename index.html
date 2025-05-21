@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title> SUPER ENCRYPTOR 🔐</title>
+    <style>
+        body { font-family: 'Courier New', monospace; max-width: 800px; margin: 0 auto; padding: 20px; background: #0f0f23; color: #00ff00; }
+        textarea, input, button, select { width: 100%; padding: 10px; margin: 10px 0; background: #000; color: #0f0; border: 1px solid #00ff00; }
+        button { background: #005500 !important; cursor: pointer; font-weight: bold; }
+        button:hover { background: #007700 !important; }
+        .output { background: #000; padding: 15px; border: 1px solid #00ff00; min-height: 20px; white-space: pre-wrap; }
+        .section { margin-bottom: 30px; border-bottom: 1px dashed #00ff00; padding-bottom: 20px; }
+        h1, h2 { color: #00ff00; text-shadow: 0 0 5px #00ff00; }
+        #matrix-canvas { position: fixed; top: 0; left: 0; z-index: -1; opacity: 0.1; pointer-events: none; }
+        .tooltip { cursor: help; border-bottom: 1px dotted #00ff00; }
+    </style>
+</head>
+<body>
+    <canvas id="matrix-canvas"></canvas>
+    
+    <h1> SUPER ENCRYPTOR 🔐</h1>
+    <p><em>"ENCRYPT"</em></p>
+
+    <div class="section">
+        <h2>⚙️ Mode Enkripsi</h2>
+        <select id="encryption-mode">
+            <option value="substitution">Substitusi Dasar (A=0)</option>
+            <option value="caesar">Caesar Cipher</option>
+            <option value="xor">XOR Cipher</option>
+            <option value="base64">Base64</option>
+        </select>
+
+        <div id="caesar-options" style="display: none;">
+            <label>Geser (Shift):</label>
+            <input type="number" id="caesar-shift" value="3" min="1" max="25">
+        </div>
+
+        <div id="xor-options" style="display: none;">
+            <label>Kunci XOR (1 karakter):</label>
+            <input type="text" id="xor-key" maxlength="1" value="X">
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔢 Enkripsi Teks → Kode</h2>
+        <textarea id="input-text" rows="4" placeholder="Masukkan teks rahasia..."></textarea>
+        <button onclick="encrypt()">🚀 ENKRIPSI</button>
+        <div class="output" id="encrypted-output"></div>
+        <button onclick="copyResult('encrypted-output')">📋 Salin Hasil</button>
+        <button onclick="saveToFile('encrypted-output', 'encrypted.txt')">💾 Simpan ke File</button>
+    </div>
+
+    <div class="section">
+        <h2>🔡 Dekripsi Kode → Teks</h2>
+        <textarea id="input-code" rows="4" placeholder="Masukkan kode (angka/base64)..."></textarea>
+        <button onclick="decrypt()">🔓 DEKRIPSI</button>
+        <div class="output" id="decrypted-output"></div>
+        <button onclick="copyResult('decrypted-output')">📋 Salin Hasil</button>
+    </div>
+
+    <div class="section">
+        <h2>📊 Tabel Substitusi Lengkap</h2>
+        <div id="substitution-table" style="overflow-x: auto;"></div>
+        <button onclick="generateSubstitutionTable()">🔄 Refresh Tabel</button>
+    </div>
+
+    <div class="section">
+        <h2>🧠 Fitur Tambahan</h2>
+        <button onclick="generatePassword()">🎲 Generate Password</button>
+        <div class="output" id="password-output"></div>
+        
+        <button onclick="analyzeFrequency()">🔍 Analisis Frekuensi</button>
+        <div class="output" id="frequency-output"></div>
+    </div>
+
+    <script>
+        // ==================== KONFIGURASI ====================
+        const substitutionMap = {
+            // Huruf Kapital (A-Z)
+            'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8, 'J': 9,
+            'K': 10, 'L': 11, 'M': 12, 'N': 13, 'O': 14, 'P': 15, 'Q': 16, 'R': 17, 'S': 18, 'T': 19,
+            'U': 20, 'V': 21, 'W': 22, 'X': 23, 'Y': 24, 'Z': 25,
+            
+            // Huruf Kecil (a-z)
+            'a': 51, 'b': 52, 'c': 53, 'd': 54, 'e': 55, 'f': 56, 'g': 57, 'h': 58, 'i': 59, 'j': 60,
+            'k': 61, 'l': 62, 'm': 63, 'n': 64, 'o': 65, 'p': 66, 'q': 67, 'r': 68, 's': 69, 't': 70,
+            'u': 71, 'v': 72, 'w': 73, 'x': 74, 'y': 75, 'z': 76,
+            
+            // Angka (0-9)
+            '0': 41, '1': 42, '2': 43, '3': 44, '4': 45, '5': 46, '6': 47, '7': 48, '8': 49, '9': 50,
+            
+            // Tanda Baca & Simbol
+            ' ': 26, '.': 27, ',': 28, '!': 29, '?': 30, '@': 31, '#': 32, '$': 33, '%': 34, '&': 35,
+            '/': 36, '\\': 37, '+': 38, '-': 39, '=': 40, '\n': 100, '\t': 101
+        };
+
+        // ==================== FUNGSI UTAMA ====================
+        function encrypt() {
+            const mode = document.getElementById('encryption-mode').value;
+            const text = document.getElementById('input-text').value;
+            let result;
+
+            switch(mode) {
+                case 'substitution':
+                    result = substituteEncrypt(text);
+                    break;
+                case 'caesar':
+                    const shift = parseInt(document.getElementById('caesar-shift').value);
+                    result = caesarCipher(text, shift);
+                    break;
+                case 'xor':
+                    const key = document.getElementById('xor-key').value.charCodeAt(0);
+                    result = xorCipher(text, key);
+                    break;
+                case 'base64':
+                    result = btoa(unescape(encodeURIComponent(text)));
+                    break;
+                default:
+                    result = "Mode tidak valid!";
+            }
+
+            document.getElementById('encrypted-output').innerText = result;
+        }
+
+        function decrypt() {
+            const mode = document.getElementById('encryption-mode').value;
+            const code = document.getElementById('input-code').value;
+            let result;
+
+            switch(mode) {
+                case 'substitution':
+                    result = substituteDecrypt(code);
+                    break;
+                case 'caesar':
+                    const shift = parseInt(document.getElementById('caesar-shift').value);
+                    result = caesarCipher(code, -shift);
+                    break;
+                case 'xor':
+                    const key = document.getElementById('xor-key').value.charCodeAt(0);
+                    result = xorCipher(code, key);
+                    break;
+                case 'base64':
+                    try {
+                        result = decodeURIComponent(escape(atob(code)));
+                    } catch {
+                        result = "Base64 tidak valid!";
+                    }
+                    break;
+                default:
+                    result = "Mode tidak valid!";
+            }
+
+            document.getElementById('decrypted-output').innerText = result;
+        }
+
+        // ==================== ALGORITMA ENKRIPSI ====================
+        function substituteEncrypt(text) {
+            let result = [];
+            for (let char of text) {
+                if (substitutionMap[char] !== undefined) {
+                    result.push(substitutionMap[char]);
+                } else {
+                    result.push(`[${char.charCodeAt(0)}]`);
+                }
+            }
+            return result.join(', ');
+        }
+
+        function substituteDecrypt(codeStr) {
+            const codes = codeStr.split(',').map(num => parseInt(num.trim()));
+            const reverseMap = {};
+            for (let char in substitutionMap) {
+                reverseMap[substitutionMap[char]] = char;
+            }
+            
+            let result = [];
+            for (let num of codes) {
+                if (reverseMap[num] !== undefined) {
+                    result.push(reverseMap[num]);
+                } else if (!isNaN(num)) {
+                    result.push(String.fromCharCode(num));
+                } else {
+                    result.push('[?]');
+                }
+            }
+            return result.join('');
+        }
+
+        function caesarCipher(text, shift) {
+            shift = shift % 26;
+            return text.split('').map(char => {
+                if (/[A-Z]/.test(char)) {
+                    return String.fromCharCode(((char.charCodeAt(0) - 65 + shift + 26) % 26 + 65);
+                } else if (/[a-z]/.test(char)) {
+                    return String.fromCharCode(((char.charCodeAt(0) - 97 + shift + 26) % 26 + 97);
+                }
+                return char;
+            }).join('');
+        }
+
+        function xorCipher(text, key) {
+            return text.split('').map(char => {
+                const code = char.charCodeAt(0) ^ key;
+                return String.fromCharCode(code);
+            }).join('');
+        }
+
+        // ==================== FITUR TAMBAHAN ====================
+        function generatePassword() {
+            const length = 12;
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
+            let password = '';
+            for (let i = 0; i < length; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            document.getElementById('password-output').innerText = password;
+        }
+
+        function analyzeFrequency() {
+            const text = document.getElementById('input-text').value.toLowerCase();
+            const freq = {};
+            for (let char of text) {
+                if (/[a-z]/.test(char)) {
+                    freq[char] = (freq[char] || 0) + 1;
+                }
+            }
+            
+            let result = "Analisis Frekuensi Huruf:\n";
+            result += "========================\n";
+            for (let char in freq) {
+                result += `${char}: ${freq[char]}\t${'■'.repeat(freq[char])}\n`;
+            }
+            
+            document.getElementById('frequency-output').innerText = result;
+        }
+
+        // ==================== UTILITAS ====================
+        function copyResult(elementId) {
+            const text = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert("Tersalin ke clipboard!");
+            });
+        }
+
+        function saveToFile(elementId, filename) {
+            const text = document.getElementById(elementId).innerText;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function generateSubstitutionTable() {
+            let tableHTML = '<table border="1" cellpadding="5" style="width:100%;"><tr><th>Karakter</th><th>Kode</th><th>Karakter</th><th>Kode</th><th>Karakter</th><th>Kode</th></tr>';
+            const chars = Object.keys(substitutionMap);
+            
+            for (let i = 0; i < chars.length; i += 3) {
+                const char1 = chars[i] === ' ' ? 'Spasi' : 
+                             chars[i] === '\n' ? 'Enter' : 
+                             chars[i] === '\t' ? 'Tab' : chars[i];
+                const char2 = i + 1 < chars.length ? 
+                             (chars[i + 1] === ' ' ? 'Spasi' : 
+                              chars[i + 1] === '\n' ? 'Enter' : 
+                              chars[i + 1] === '\t' ? 'Tab' : chars[i + 1]) : '';
+                const char3 = i + 2 < chars.length ? 
+                             (chars[i + 2] === ' ' ? 'Spasi' : 
+                              chars[i + 2] === '\n' ? 'Enter' : 
+                              chars[i + 2] === '\t' ? 'Tab' : chars[i + 2]) : '';
+                
+                tableHTML += `<tr>
+                    <td>${char1}</td>
+                    <td>${substitutionMap[chars[i]]}</td>
+                    <td>${char2}</td>
+                    <td>${i + 1 < chars.length ? substitutionMap[chars[i + 1]] : ''}</td>
+                    <td>${char3}</td>
+                    <td>${i + 2 < chars.length ? substitutionMap[chars[i + 2]] : ''}</td>
+                </tr>`;
+            }
+            
+            tableHTML += '</table>';
+            document.getElementById('substitution-table').innerHTML = tableHTML;
+        }
+
+        // ==================== UI EFFECTS ====================
+        document.getElementById('encryption-mode').addEventListener('change', function() {
+            document.getElementById('caesar-options').style.display = 'none';
+            document.getElementById('xor-options').style.display = 'none';
+            
+            if (this.value === 'caesar') {
+                document.getElementById('caesar-options').style.display = 'block';
+            } else if (this.value === 'xor') {
+                document.getElementById('xor-options').style.display = 'block';
+            }
+        });
+
+        // Matrix background effect
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
+        const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const nums = '0123456789';
+        const alphabet = katakana + latin + nums;
+
+        const fontSize = 16;
+        const columns = canvas.width / fontSize;
+        const rainDrops = Array(Math.floor(columns)).fill(0);
+
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#00ff00';
+            ctx.font = fontSize + 'px monospace';
+            
+            for (let i = 0; i < rainDrops.length; i++) {
+                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+                
+                if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    rainDrops[i] = 0;
+                }
+                rainDrops[i]++;
+            }
+        }
+
+        setInterval(drawMatrix, 30);
+
+        // Initialize
+        generateSubstitutionTable();
+    </script>
+</body>
+</html>
